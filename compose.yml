@@ -1,0 +1,65 @@
+name: ${APP_NAME}
+
+services:
+    postgres:
+        container_name: ${APP_NAME}-db
+        image: postgres:15
+        environment:
+            POSTGRES_DB: ${APP_NAME}
+            POSTGRES_USER: ${APP_USER}
+            POSTGRES_PASSWORD: ${APP_PASSWORD}
+        ports:
+            - "5432:5432"
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U notify"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+    redis:
+        image: redis:alpine
+        container_name: ${APP_NAME}-redis
+        ports:
+            - "6379:6379"
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+    app:
+        build: .
+        container_name: ${APP_NAME}
+        volumes:
+            - .:/var/www
+        depends_on:
+            - postgres
+            - redis
+        environment:
+            DB_CONNECTION: pgsql
+            DB_HOST: postgres
+            DB_PORT: 5432
+            DB_DATABASE: ${APP_NAME}
+            DB_USERNAME: ${APP_USER}
+            DB_PASSWORD: ${APP_PASSWORD}
+            REDIS_HOST: redis
+        command: sh -c "php artisan migrate --force && php-fpm"
+        ports:
+            - "9000:9000"
+
+    webserver:
+        image: nginx:alpine
+        container_name: ${APP_NAME}-nginx
+        ports:
+            - "8080:80"
+        volumes:
+            - .:/var/www
+            - ./.docker/nginx.conf:/etc/nginx/conf.d/default.conf
+        depends_on:
+            - app
+
+volumes:
+    pgdata:
+        name: ${APP_NAME}_db
